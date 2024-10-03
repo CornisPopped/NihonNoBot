@@ -1,0 +1,42 @@
+Privacy Policy for NihonNoBot
+Effective Date: [Insert Date]
+
+1. Introduction
+This Privacy Policy outlines how NihonNoBot ("the bot") collects, uses, and protects user data during its operation on Discord. By using the bot, you agree to the collection and use of information as described in this policy. We are committed to ensuring that your privacy is protected.
+
+2. Information Collection
+NihonNoBot does not collect or store personal information from users. The bot processes commands and data inputs temporarily in order to provide anime and manga information, recommendations, and other services. The data is not stored, shared, or logged in any persistent manner.
+
+2.1 Commands and Inputs
+The bot processes the following types of non-personally identifiable information:
+
+Search queries for anime, manga, or characters.
+Tags or genres for recommendation purposes.
+User-provided data necessary for ranking or statistics commands.
+This information is processed in real-time to return relevant results and is not retained once the command has been fulfilled.
+
+2.2 API Usage
+NihonNoBot integrates with third-party services like MyAnimeList (via JikanAPI) to retrieve anime and manga information. While we do not control the data policies of these external services, NihonNoBot only processes information necessary to fulfill user requests. Users should refer to the privacy policies of those external services for more information on their data handling practices.
+
+3. Data Retention and Security
+Since NihonNoBot does not store user data, there is no long-term retention of data provided through commands. The bot processes all requests in real-time and discards the data once a response has been provided.
+
+We prioritize user privacy and take steps to ensure that interactions with the bot are secure. However, we cannot fully guarantee the security of data processed by external services (such as API providers).
+
+4. Third-Party Services
+NihonNoBot uses external APIs to provide anime and manga data (e.g., MyAnimeList). The bot passes user queries to these services to retrieve information. While we do not send any personal information to third-party services, your interactions with the bot may be subject to the privacy practices of those services.
+
+We recommend reviewing the privacy policies of external services such as:
+
+MyAnimeList Privacy Policy
+5. User Responsibilities
+While NihonNoBot is designed to protect your privacy, we encourage users to avoid sharing sensitive or personally identifiable information through the bot. If you have any concerns about your privacy, refrain from inputting private information into any commands.
+
+6. Children’s Privacy
+NihonNoBot does not knowingly collect any information from children under the age of 13. If you believe that a child under 13 has provided personal information through the bot, please contact us immediately so we can take appropriate actions.
+
+7. Changes to this Privacy Policy
+We reserve the right to modify this Privacy Policy at any time. Any changes will be reflected in the updated policy and shared with users through relevant channels (e.g., GitHub, Discord bot description). Continued use of NihonNoBot following any changes to this policy signifies your acceptance of the updated terms.
+
+8. Contact Information
+If you have any questions, concerns, or requests regarding this Privacy Policy or the bot's operation, please contact the developer at cornispopped, or dubstepfox84@gmail.com.
