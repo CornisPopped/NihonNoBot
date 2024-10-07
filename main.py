@@ -2,6 +2,7 @@ import logging
 import discord
 from discord.ext import commands
 from discord import app_commands
+from discord.ui import Button, View
 from jikan4snek import Jikan4SNEK
 import os
 from dotenv import load_dotenv
@@ -41,6 +42,30 @@ async def on_ready():
 
     print(f'Bot is online as {bot.user}')
 
+
+# Paginator class for handling embed navigation
+class PaginatorView(View):
+    def __init__(self, embeds, timeout=60):
+        super().__init__(timeout=timeout)
+        self.embeds = embeds
+        self.current_page = 0
+        self.total_pages = len(embeds)
+        self.message = None
+
+    async def send_initial_message(self, interaction: discord.Interaction):
+        self.message = await interaction.followup.send(embed=self.embeds[self.current_page], view=self)
+
+    @discord.ui.button(label='◀️', style=discord.ButtonStyle.primary)
+    async def previous_page(self, button: discord.ui.Button, interaction: discord.Interaction):
+        self.current_page = (self.current_page - 1) % self.total_pages
+        await self.message.edit(embed=self.embeds[self.current_page])
+
+    @discord.ui.button(label='▶️', style=discord.ButtonStyle.primary)
+    async def next_page(self, button: discord.ui.Button, interaction: discord.Interaction):
+        self.current_page = (self.current_page + 1) % self.total_pages
+        await self.message.edit(embed=self.embeds[self.current_page])
+
+
 # Slash command to display latest anime updates on MAL
 @bot.tree.command(name="animelist", description="Display the latest updates on MAL")
 async def animelist(interaction: discord.Interaction):
@@ -59,29 +84,6 @@ async def animelist(interaction: discord.Interaction):
         logging.error(f"Error in /animelist command: {e}")
         await interaction.response.send_message(f"Error fetching updates: {e}")
 
-# # Slash command to search for an anime by title (DEPRECATED DUE TO REDUNDANCY - /animeinfo does it better!)
-# @bot.tree.command(name="search", description="Search for an anime by title")
-# async def search(interaction: discord.Interaction, query: str):
-#     try:
-#         logging.info(f"Searching for anime with title: {query}")
-#         search_result = await asyncio.wait_for(jikan.search(query).anime(), timeout=10)  # Timeout of 10 seconds
-#         if 'data' in search_result and search_result['data']:
-#             top_result = search_result['data'][0]
-#             response = (
-#                 f"**{top_result['title']}**\n"
-#                 f"Synopsis: {top_result['synopsis']}\n"
-#                 f"Score: {top_result['score']}\n"
-#                 f"Episodes: {top_result.get('episodes', 'N/A')}"
-#             )
-#         else:
-#             response = f"No results found for {query}."
-#         await interaction.response.send_message(response)
-#     except asyncio.TimeoutError:
-#         logging.error("Request to Jikan API timed out")
-#         await interaction.response.send_message("The request to MAL timed out. Please try again later.")
-#     except Exception as e:
-#         logging.error(f"Error in /search command: {e}")
-#         await interaction.response.send_message(f"Error searching for {query}: {e}")
 
 # Slash command to get detailed anime info by title
 @bot.tree.command(name="animeinfo", description="Get detailed info about an anime")
@@ -153,26 +155,34 @@ async def animeinfo(interaction: discord.Interaction, title: str):
         await interaction.followup.send(f"Error retrieving info for {title}: {e}")
 
 
-
 # Slash command to get popular anime
 @bot.tree.command(name="popular", description="Get the top 10 most popular anime")
 async def popular(interaction: discord.Interaction):
+    await interaction.response.defer()  # Defer response to avoid timing out
+
     try:
         logging.info("Fetching top 10 most popular anime from Jikan API")
-        top_anime = await asyncio.wait_for(jikan.search("anime").anime(), timeout=10)
+        
+        # Fetching top anime using Jikan4SNEK's search method with a limit of 10
+        top_anime = await asyncio.wait_for(jikan.search("anime", limit=10).anime(), timeout=10)
+
         if 'data' in top_anime and top_anime['data']:
+            # Create a list of the top 10 popular anime
             top_list = "\n".join(
-                [f"{i+1}. {anime['title']} (Score: {anime['score']})" for i, anime in enumerate(top_anime['data'][:10])]
+                [f"{i+1}. {anime['title']} (Score: {anime.get('score', 'N/A')})" for i, anime in enumerate(top_anime['data'][:10])]
             )
-            await interaction.response.send_message(f"Top 10 most popular anime:\n{top_list}")
+            await interaction.followup.send(f"Top 10 most popular anime:\n{top_list}")
         else:
-            await interaction.response.send_message("No popular anime data available.")
+            await interaction.followup.send("No popular anime data available.")
+    
     except asyncio.TimeoutError:
         logging.error("Request to Jikan API timed out")
-        await interaction.response.send_message("The request to MAL timed out. Please try again later.")
+        await interaction.followup.send("The request to MAL timed out. Please try again later.")
+    
     except Exception as e:
         logging.error(f"Error in /popular command: {e}")
-        await interaction.response.send_message(f"Error fetching popular anime: {e}")
+        await interaction.followup.send(f"Error fetching popular anime: {e}")
+
 
 # Slash command to recommend anime based on a genre
 @bot.tree.command(name="recommend", description="Recommend anime based on a genre")
@@ -194,25 +204,6 @@ async def recommend(interaction: discord.Interaction, genre: str):
         logging.error(f"Error in /recommend command: {e}")
         await interaction.response.send_message(f"Error fetching recommendations for {genre}: {e}")
 
-# Slash command to find similar anime to a title
-@bot.tree.command(name="similar", description="Find similar anime to a title")
-async def similar(interaction: discord.Interaction, title: str):
-    try:
-        logging.info(f"Fetching similar anime for title: {title}")
-        search_result = await asyncio.wait_for(jikan.search(title).anime(), timeout=10)
-        if 'data' in search_result and search_result['data']:
-            anime_id = search_result['data'][0]['mal_id']
-            related_anime = await asyncio.wait_for(jikan.get(anime_id, entry="related").anime(), timeout=10)
-            similar_anime = "\n".join([rec['title'] for rec in related_anime['data'][:5]])
-            await interaction.response.send_message(f"Anime similar to {title}:\n{similar_anime}")
-        else:
-            await interaction.response.send_message(f"No similar anime found for {title}.")
-    except asyncio.TimeoutError:
-        logging.error("Request to Jikan API timed out")
-        await interaction.response.send_message("The request to MAL timed out. Please try again later.")
-    except Exception as e:
-        logging.error(f"Error in /similar command: {e}")
-        await interaction.response.send_message(f"Error retrieving similar anime: {e}")
 
 # Run the bot using the token from the .env file
 bot.run(os.getenv('DISCORD_TOKEN'))
