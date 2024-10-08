@@ -1,142 +1,97 @@
-import logging
+# Discord imports
 import discord
 from discord.ext import commands
 from discord import app_commands
-from jikanpy import Jikan  # Import JikanPy
+
+# Other imports
 import os
+import dotenv
 from dotenv import load_dotenv
-import asyncio
-
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-
-# Load environment variables from the .env file
 load_dotenv()
 
-# Create bot instance
-intents = discord.Intents.default()
+# jikanPy import
+from jikanpy import AioJikan
+
+# open Jikan Client
+jikan = AioJikan()
+
+intents = discord.Intents.all()
 intents.message_content = True
+bot = commands.Bot(command_prefix='/', intents=intents)
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+# Load Test Server
+test_guild_id = int(os.getenv('TEST_GUILD_ID'))
 
-# Initialize JikanPy API client
-jikan = Jikan()  # Use JikanPy
-
-# Syncing
 @bot.event
 async def on_ready():
-    test_guild = discord.Object(id=os.getenv('TEST_GUILD_ID'))  # specific test guild
+    print(f'{bot.user} has connected to Discord!')
 
-    try:
-        # Force command re-sync to update parameter types
-        await bot.tree.sync(guild=test_guild)
-        print(f'Successfully synced commands to test guild {test_guild.id}')
-
-    except Exception as e:
-        logging.error(f'Failed to sync commands: {e}')
-
-    print(f'Bot is online as {bot.user}')
-
-
+# DO NOT SYNC ON 'on_ready()', OR WILL SUFFER FROM RATELIMITING... THANKS DISCORD!
+# Sync command: Clear existing commands and sync only the new ones
+@bot.hybrid_command()
+async def sync(ctx: commands.Context):
+    await ctx.send('Clearing old commands and syncing new ones...')
     
-# Slash command to get popular anime
-@bot.tree.command(name="popular", description="Get the top 10 most popular anime")
-async def popular(interaction: discord.Interaction):
-    await interaction.response.defer()  # Defer response to avoid timing out
-
     try:
-        logging.info("Fetching top 10 most popular anime from Jikan API")
+        guild = discord.Object(id=test_guild_id)
         
-        # Fetching top anime using JikanPy
-        top_anime = jikan.top(type='anime', page=1)  # Fetch top anime from JikanPy
+        # Clear all existing commands in the test guild (this is NOT awaitable)
+        bot.tree.clear_commands(guild=guild)  # No await here
+        await ctx.send(f"Cleared all old commands from test guild {test_guild_id}.")
         
-        # Check if data is available
-        if 'data' in top_anime:
-            # Create a list of the top 10 popular anime
-            top_list = "\n".join(
-                [f"{i+1}. {anime['title']} (Score: {anime.get('score', 'N/A')})" for i, anime in enumerate(top_anime['data'][:10])]
-            )
-            await interaction.followup.send(f"Top 10 most popular anime:\n{top_list}")
-        else:
-            await interaction.followup.send("No popular anime data available.")
-    
+        # Sync the current commands to the test guild (this IS awaitable)
+        await bot.tree.sync(guild=guild)
+        await ctx.send(f"Commands synced to test guild with ID: {test_guild_id}")
+        
     except Exception as e:
-        logging.error(f"Error in /popular command: {e}")
-        await interaction.followup.send(f"Error fetching popular anime: {e}")
+        await ctx.send(f"Failed to sync commands: {str(e)}")
 
-# Slash command to get detailed anime info by title (corrected for string input)
-@bot.tree.command(name="animeinfo", description="Get detailed info about an anime")
-@app_commands.describe(title="The title of the anime to search for")  # Describe the parameter
-async def animeinfo(interaction: discord.Interaction, title: str):  # Use `str` type for title
-    await interaction.response.defer()  # Defer response to avoid timing out
+        
+# # Test command
+# @bot.hybrid_command()
+# async def ping(ctx: commands.Context):
+#     await ctx.send('pong')
+
+# Animeinfo command
+@bot.hybrid_command()
+@app_commands.describe(title="The title of the anime you want to search for")
+async def animeinfo(ctx: commands.Context, *, title: str):
+    """Searches for anime details by title using AioJikan"""
+    await ctx.defer()  # Defer the response to avoid timeout while processing
 
     try:
-        logging.info(f"Searching for anime with title: {title}")
-        
-        # Search for anime by title using JikanPy
-        jikan = AioJikan()
+        # Search for anime by title (use async call)
         search_result = await jikan.search('anime', title)
-        await jikan.close()
 
-        if search_result['results']:
-            # Fetch the first search result's ID (MAL ID)
-            anime_id = search_result['results'][0]['mal_id']
-            
-            # Fetch detailed anime info using the anime ID
-            anime_info = await jikan.anime(anime_id)
+        # Debug: Print the actual response from the API
+        print(f"Raw search results for '{title}':", search_result)
 
-            # Extract relevant details
-            title = anime_info['title']
-            synopsis = anime_info.get('synopsis', 'No synopsis available.')
-            episodes = anime_info.get('episodes', 'N/A')
-            duration = anime_info.get('duration', 'N/A')
-            status = anime_info.get('status', 'N/A')
-            genres = ", ".join([genre['name'] for genre in anime_info['genres']]) if 'genres' in anime_info else 'N/A'
-            score = anime_info.get('score', 'N/A')
-            rank = anime_info.get('rank', 'N/A')
-            image_url = anime_info['images']['jpg']['image_url']  # Anime title card image
+        # Check if the 'data' key exists and is not empty
+        if 'data' in search_result and len(search_result['data']) > 0:
+            anime = search_result['data'][0]  # Get the first result
+            anime_title = anime.get('title', 'Unknown Title')
+            synopsis = anime.get('synopsis', 'No synopsis available.')
+            episodes = anime.get('episodes', 'N/A')
+            score = anime.get('score', 'N/A')
+            image_url = anime['images']['jpg']['image_url']  # Corrected image URL field
 
-            # Create embed message
-            embed = discord.Embed(title=title, description=synopsis, color=discord.Color.blue())
-            embed.set_thumbnail(url=image_url)
+            # Create an embed to display anime info nicely
+            embed = discord.Embed(title=anime_title, description=synopsis, color=discord.Color.blue())
             embed.add_field(name="Episodes", value=episodes, inline=True)
-            embed.add_field(name="Duration", value=duration, inline=True)
-            embed.add_field(name="Status", value=status, inline=True)
-            embed.add_field(name="Genres", value=genres, inline=False)
-            embed.add_field(name="Average Rating", value=score, inline=True)
-            embed.add_field(name="Rank", value=rank, inline=True)
+            embed.add_field(name="Score", value=score, inline=True)
+            embed.set_thumbnail(url=image_url)
 
-            await interaction.followup.send(embed=embed)
+            # Send the embedded message with the anime details
+            await ctx.send(embed=embed)
+            print(f"Successfully sent embed for anime '{anime_title}'")
         else:
-            await interaction.followup.send(f"No anime found with title '{title}'.")
+            await ctx.send(f"No anime found with the title: {title}")
+            print(f"No results found for anime title: {title}")
 
     except Exception as e:
-        logging.error(f"Error in /animeinfo command: {e}")
-        await interaction.followup.send(f"Error retrieving info for anime '{title}': {e}")
+        # Send the error to the user and log it
+        await ctx.send(f"An error occurred while fetching anime info: {str(e)}")
+        print(f"Error occurred while fetching anime info: {e}")
 
-# Slash command to recommend anime based on a genre
-@bot.tree.command(name="recommend", description="Recommend anime based on a genre")
-async def recommend(interaction: discord.Interaction, genre: str):
-    await interaction.response.defer()  # Defer response
-
-    try:
-        logging.info(f"Fetching anime recommendations for genre: {genre}")
-        
-        # Search for anime in the genre
-        search_result = jikan.search(search_type='anime', query=genre)
-        
-        if 'results' in search_result:
-            recommendations = "\n".join(
-                [f"{entry['title']} (Score: {entry['score']})" for entry in search_result['results'][:5]]
-            )
-            await interaction.followup.send(f"Recommended anime for the genre {genre}:\n{recommendations}")
-        else:
-            await interaction.followup.send(f"No recommendations found for genre: {genre}")
-    
-    except Exception as e:
-        logging.error(f"Error in /recommend command: {e}")
-        await interaction.followup.send(f"Error fetching recommendations for {genre}: {e}")
-
-
-# Run the bot using the token from the .env file
+# Runs the bot
 bot.run(os.getenv('DISCORD_TOKEN'))
